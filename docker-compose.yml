@@ -1,0 +1,75 @@
+services:
+  # Headless Chrome over CDP. Real browser — runs FB's React app, executes
+  # the __rd_verify_* challenge JS, fires pagination XHRs on scroll.
+  chrome:
+    image: browserless/chrome:latest
+    container_name: fb-ads-chrome
+    ports:
+      - "9222:3000"
+    shm_size: 2gb
+    environment:
+      TOKEN: ""             # disable auth for local dev
+      CONCURRENT: "5"
+      QUEUED: "10"
+      # 10-minute browser session ceiling. Scrapes with many scroll rounds
+      # can run 2-5 min; the api enforces its own scroll_max_seconds cap.
+      TIMEOUT: "600000"
+      HOST: "0.0.0.0"
+      PORT: "3000"
+      # Tells browserless what URL clients reach it on so /json/version
+      # advertises a routable WS host (Playwright uses the URL verbatim).
+      EXTERNAL: "http://chrome:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/json/version || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: fb-ads-api
+    ports:
+      - "8000:8000"
+    environment:
+      BROWSER_BACKEND: ${BROWSER_BACKEND:-chrome}
+      CHROME_CDP_URL: http://chrome:3000
+      CHROME_PROXY: ${CHROME_PROXY:-}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173}
+      OUTPUT_DIR: /app/output
+      DEFAULT_COUNTRY: ${DEFAULT_COUNTRY:-ALL}
+      DEFAULT_AD_TYPE: ${DEFAULT_AD_TYPE:-all}
+      DEFAULT_MAX_PAGES: ${DEFAULT_MAX_PAGES:-50}
+      # Containers have no display; force Playwright headless when running
+      # via docker-compose. Override only with Xvfb / X11 forwarding.
+      PLAYWRIGHT_HEADLESS: "true"
+      PLAYWRIGHT_SLOW_MO_MS: ${PLAYWRIGHT_SLOW_MO_MS:-0}
+      # Optional: enable LLM-driven pagination via Gemini 2.5 Flash.
+      # Without it, the scraper uses deterministic scroll-to-bottom.
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Webshare residential pool — host:port:user:pass, comma- or
+      # newline-separated. Empty → no proxy rotation available.
+      WEBSHARE_PROXIES: ${WEBSHARE_PROXIES:-}
+    depends_on:
+      chrome:
+        condition: service_healthy
+        required: false
+    volumes:
+      - ./output:/app/output
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fb-ads-web
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    restart: unless-stopped

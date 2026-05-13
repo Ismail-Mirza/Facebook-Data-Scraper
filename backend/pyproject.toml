@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fb-ads-scraper"
+version = "0.1.0"
+description = "Meta Ads Library scraper with pluggable Chrome (CDP) / Playwright backends"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.8",
+    "pydantic-settings>=2.5",
+    "playwright>=1.49",
+    "playwright-stealth>=1.0.6",
+    "tenacity>=9.0",
+    "httpx>=0.28",
+    "httpx-socks>=0.10",
+    "selectolax>=0.3.21",
+    "click>=8.1",
+    "python-dotenv>=1.0",
+    "anyio>=4.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+]
+
+[project.scripts]
+fb-ads = "fb_ads_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+exclude = ["**/proxy.py"]  # large auto-generated proxy list
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",  # line-too-long — mainly inside embedded JS strings
+    "B008",  # function calls in default args (FastAPI Depends() pattern)
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
